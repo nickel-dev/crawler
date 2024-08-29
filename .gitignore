@@ -42,6 +42,12 @@
 *.idb
 *.pdb
 
+# Build files
+build/
+build-int/
+build/*
+build-int/*
+
 # Kernel Module Compile Results
 *.mod*
 *.cmd
