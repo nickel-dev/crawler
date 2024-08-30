@@ -26,6 +26,12 @@ global b8 pickedUpItemThisFrame;
 global b8 loadNextLevel;
 global b8 inTransition;
 
+global Entity* trapdoor;
+global Entity* frog;
+
+global u32 tileMapTextures[256];
+global char* tileMap;
+
 global u32 uiTransitionTexture;
 global u32 uiMenuBackTexture;
 global u32 uiInvTexture;
@@ -50,13 +56,6 @@ global u32 mouseTexture;
 global u32 crawlerTexture;
 global u32 tortoiseTexture;
 
-global u32 tileMapTextures[256];
-
-global Entity* frog;
-global Entity* trapdoor;
-
-global char* tileMap;
-
 global ma_engine soundEngine;
 global ma_sound* hitSound;
 global ma_sound* hitPlayerSound;
@@ -65,7 +64,7 @@ global ma_sound* menuSound;
 global ma_sound* selectSound;
 global ma_sound* pickupSound;
 global ma_sound* swingSound;
-global ma_sound* footstepSound;
+global ma_sound* deathSound;
 
 #include "maps.h"
 
@@ -127,6 +126,7 @@ void LoadAssets()
 	tileMapTextures[0] = CreateTextureFromRGBA(V4(50.0f, 27.0f, 39.0f, 255.0f));
 	tileMapTextures[1] = LoadTexture("textures/brick_small.png");
 	tileMapTextures[2] = LoadTexture("textures/stone_ground.png");
+	tileMapTextures[3] = CreateTextureFromRGBA(V4(10.0f, 0.0f, 8.0f, 255.0f));
 	
 	// Loading sounds
 	hitSound = LoadSound("sounds/hit.wav");
@@ -136,7 +136,7 @@ void LoadAssets()
 	selectSound = LoadSound("sounds/select.wav");
 	pickupSound = LoadSound("sounds/pickup.wav");
 	swingSound = LoadSound("sounds/swing.wav");
-	footstepSound = LoadSound("sounds/footstep.wav");
+	deathSound = LoadSound("sounds/death.wav");
 	
 	ma_sound_set_volume(selectSound, 0.5f);
 	ma_sound_set_volume(swingSound, 0.5f);
@@ -166,7 +166,7 @@ extern GAME_ON_START(OnStart)
 	LoadMap(maps[0], TILE_MAP_WIDTH, TILE_MAP_HEIGHT);
 }
 
-b8 TileCollsion(i32 x, i32 y, AABB aabb)
+b8 TileCollision(i32 x, i32 y, AABB aabb)
 {
 	if (TilePos(tileMap, x, y) != '#')
 		return false;
@@ -184,15 +184,15 @@ b8 EntityPhysics(Entity* e)
 	i32 y = (i32)e->pos.y;
 	AABB h = EntityAABB(e);
 	
-	if      (TileCollsion(x + 0, y + 0, h)) return true;
-	else if (TileCollsion(x + 1, y + 0, h)) return true;
-	else if (TileCollsion(x + 1, y + 1, h)) return true;
-	else if (TileCollsion(x + 0, y + 1, h)) return true;
-	else if (TileCollsion(x + 1, y - 1, h)) return true;
-	else if (TileCollsion(x - 1, y - 0, h)) return true;
-	else if (TileCollsion(x - 1, y - 1, h)) return true;
-	else if (TileCollsion(x - 0, y - 1, h)) return true;
-	else if (TileCollsion(x - 1, y + 1, h)) return true;
+	if      (TileCollision(x + 0, y + 0, h)) return true;
+	else if (TileCollision(x + 1, y + 0, h)) return true;
+	else if (TileCollision(x + 1, y + 1, h)) return true;
+	else if (TileCollision(x + 0, y + 1, h)) return true;
+	else if (TileCollision(x + 1, y - 1, h)) return true;
+	else if (TileCollision(x - 1, y - 0, h)) return true;
+	else if (TileCollision(x - 1, y - 1, h)) return true;
+	else if (TileCollision(x - 0, y - 1, h)) return true;
+	else if (TileCollision(x - 1, y + 1, h)) return true;
 	
 	return false;
 }
@@ -296,8 +296,13 @@ extern GAME_ON_UPDATE(OnUpdate)
 		{
 			if (e->health < 0.5f && e->destroyable)
 			{
+				if (e->texture != toombstoneTexture && e->texture != dustTexture)
+					ma_sound_start(deathSound);
+				
 				if (e->useAi)
+				{
 					e->texture = toombstoneTexture;
+				}
 				else
 					e->texture = dustTexture;
 				
@@ -391,6 +396,10 @@ extern GAME_ON_UPDATE(OnUpdate)
 				
 				case '.':
 				texture = 2; // Stone
+				break;
+				
+				case '~':
+				texture = 3; // black
 				break;
 				
 				default:
@@ -655,21 +664,20 @@ extern GAME_ON_UPDATE(OnUpdate)
 	}
 	
 	// NOTE(nickel): Trapdoor
+	if (CheckOverlap(EntityAABB(frog), EntityAABB(trapdoor)))
 	{
 		b8 allEnemiesDead = true;
 		for (u64 i = 0; i < state.enemiesSize; ++i)
 		{
-			if (state.enemies[i]->health >= 0.5f)
+			Entity* e = state.enemies[i];
+			if (e->texture != toombstoneTexture && e->texture != dustTexture && e != trapdoor)
 				allEnemiesDead = false;
 		}
 		
-		if (CheckOverlap(EntityAABB(frog), EntityAABB(trapdoor)))
-		{
-			if (allEnemiesDead)
-				loadNextLevel = true;
-			else
-				DrawString(&state, V2(newWidth / 2 + 1.5, newHeight / 2 + 4.0f), V2Scalar(0.35f), "YOU NEED TO KILL ALL ENEMIES FIRST", V4Scalar(1.0f));
-		}
+		if (allEnemiesDead)
+			loadNextLevel = true;
+		else
+			DrawString(&state, V2(newWidth / 2 + 1.5, newHeight / 2 + 4.0f), V2Scalar(0.35f), "YOU NEED TO KILL ALL ENEMIES FIRST", V4Scalar(1.0f));
 	}
 	
 	// NOTE(nickel): Death message

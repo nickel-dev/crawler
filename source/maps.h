@@ -156,7 +156,7 @@ void LoadMap(char* mTileMap, u64 tileMapWidth, u64 tileMapHeight)
 				break;
 				
 				case '!':
-				trapdoor= NewEnemy(&state);
+				trapdoor = NewEnemy(&state);
 				trapdoor->pos = V2(x, y);
 				trapdoor->texture = trapdoorTexture;
 				trapdoor->useAi = false;
@@ -186,6 +186,10 @@ void CreateArenas()
 	state.playerItemId = 0;
 	for (u64 i = 0; i < PLAYER_ITEMS_SIZE; ++i)
 		state.playerItems[i] = NULL;
+	
+	state.enemiesSize = 0;
+	for (u64 i = 0; i < ENEMIES_MAX_SIZE; ++i)
+		state.enemies[i] = NULL;
 	
 	frog = NULL;
 }
