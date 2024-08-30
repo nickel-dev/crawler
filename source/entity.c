@@ -12,6 +12,8 @@ Entity* NewEntity(State* state)
 	result->speed = 1;
 	result->destroyable = true;
 	
+	result->wobbleFrame = 0.0f;
+	
 	return result;
 }
 
@@ -135,7 +137,7 @@ void WobbleAnimation(Entity* e, f64 dt)
 	}
 	else if (e->angle != 0.0f)
 	{
-		e->wobbleFrame += dt * 800;
+		e->wobbleFrame += dt * 800 * e->speed;
 		e->angle = 7.5f * FastSin((i32)e->wobbleFrame);
 		
 		if (e->angle > -0.25f && e->angle < 0.25f)

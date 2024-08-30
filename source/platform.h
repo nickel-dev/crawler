@@ -35,6 +35,10 @@ typedef double f64;
 #define local_persist static
 #define global static
 
+#ifndef NULL
+#define NULL (void*)0x00000000
+#endif
+
 enum InputState
 {
 	INPUT_STATE_UP = 0, INPUT_STATE_DOWN

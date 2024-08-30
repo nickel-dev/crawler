@@ -64,6 +64,8 @@ global ma_sound* potionSound;
 global ma_sound* menuSound;
 global ma_sound* selectSound;
 global ma_sound* pickupSound;
+global ma_sound* swingSound;
+global ma_sound* footstepSound;
 
 #include "maps.h"
 
@@ -133,23 +135,13 @@ void LoadAssets()
 	menuSound = LoadSound("sounds/menu.wav");
 	selectSound = LoadSound("sounds/select.wav");
 	pickupSound = LoadSound("sounds/pickup.wav");
+	swingSound = LoadSound("sounds/swing.wav");
+	footstepSound = LoadSound("sounds/footstep.wav");
 	
 	ma_sound_set_volume(selectSound, 0.5f);
+	ma_sound_set_volume(swingSound, 0.5f);
 	
-	// Allocate entity arena
-	state.entitiesSize = 0;
-	state.entities = (Entity*)calloc(ENTITIES_MAX_SIZE, sizeof(Entity));
-	
-	// Gameplay Init
-	// Items
-	state.itemsSize = 0;
-	state.items = (Item*)calloc(ITEMS_MAX_SIZE, sizeof(Item));
-	
-	state.playerItemId = 0;
-	state.playerItems[0] = NULL;
-	state.playerItems[1] = NULL;
-	state.playerItems[2] = NULL;
-	state.playerItems[3] = NULL;
+	CreateArenas();
 }
 
 //~ NOTE(nickel): Function OnStart
@@ -162,11 +154,13 @@ extern GAME_ON_START(OnStart)
 		assetsLoaded = true;
 	}
 	
-	
-	frog = NewEntity(&state);
-	frog->texture = LoadTexture("textures/frog_small.png");
-	frog->health = 5;
-	frog->maxHealth = frog->health;
+	if (frog == NULL)
+	{
+		frog = NewEntity(&state);
+		frog->texture = LoadTexture("textures/frog_small.png");
+		frog->health = 5;
+		frog->maxHealth = frog->health;
+	}
 	
 	LoadMapFiles();
 	LoadMap(maps[0], TILE_MAP_WIDTH, TILE_MAP_HEIGHT);
@@ -261,19 +255,21 @@ extern GAME_ON_UPDATE(OnUpdate)
 	///////////////////
 	
 	// item switching
-	if (input.keys['1']) { state.playerItemId = 0; ma_sound_start(selectSound); }
-	if (input.keys['2']) { state.playerItemId = 1; ma_sound_start(selectSound); }
-	if (input.keys['3']) { state.playerItemId = 2; ma_sound_start(selectSound); }
-	if (input.keys['4']) { state.playerItemId = 3; ma_sound_start(selectSound); }
+	if (input.keys['1']) { state.playerItemId = 0; ma_sound_stop(selectSound); ma_sound_start(selectSound); }
+	if (input.keys['2']) { state.playerItemId = 1; ma_sound_stop(selectSound); ma_sound_start(selectSound); }
+	if (input.keys['3']) { state.playerItemId = 2; ma_sound_stop(selectSound); ma_sound_start(selectSound); }
+	if (input.keys['4']) { state.playerItemId = 3; ma_sound_stop(selectSound); ma_sound_start(selectSound); }
 	
 	if (mouseWheel > 0)
 	{
 		state.playerItemId -= 1;
+		ma_sound_stop(selectSound); 
 		ma_sound_start(selectSound);
 	}
 	else if (mouseWheel < 0)
 	{
 		state.playerItemId += 1;
+		ma_sound_stop(selectSound); 
 		ma_sound_start(selectSound);
 	}
 	
@@ -284,6 +280,9 @@ extern GAME_ON_UPDATE(OnUpdate)
 	
 	v2 dir = V2(input.keys['D'] - input.keys['A'], input.keys['W'] - input.keys['S']);
 	MovePlayer(frog, dir);
+	
+	//if (dir.x != 0.0f || dir.y != 0.0f)
+	//ma_sound_start(footstepSound);
 	
 	WobbleAnimation(frog, dt);
 	
@@ -449,6 +448,7 @@ extern GAME_ON_UPDATE(OnUpdate)
 			
 			if (mouseDown && (playerItem->lastHit + playerItem->cooldownTime - 0.05f < currentTime))
 			{
+				ma_sound_start(swingSound);
 				for (u64 i = 0; i < state.enemiesSize; ++i)
 				{
 					Entity* e = state.enemies[i];
@@ -492,6 +492,7 @@ extern GAME_ON_UPDATE(OnUpdate)
 							e->stunned = true;
 							u8 oldHealth = e->health;
 							i32 damage = playerItem->damage + frog->strength;
+							ma_sound_stop(hitSound);
 							ma_sound_start(hitSound);
 							e->health -= damage;
 							if (e->health > oldHealth)
@@ -683,17 +684,20 @@ extern GAME_ON_UPDATE(OnUpdate)
 		if (input.keys[' '] && !oldInput.keys[' '])
 		{
 			ma_sound_start(menuSound);
+			UnloadMap(false);
 			state.gameMode = GAME_MODE_MAIN_MENU;
 			OnStart();
+			return;
 		}
 	}
 	
 	if (loadNextLevel)
 	{
-		UnloadMap();
+		UnloadMap(true);
 		u64 i = 0;
 		while (maps[i] != tileMap) ++i;
 		LoadMap(maps[i + 1], TILE_MAP_WIDTH, TILE_MAP_HEIGHT);
 		loadNextLevel = false;
+		return;
 	}
 }

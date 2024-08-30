@@ -108,10 +108,6 @@ void LoadMap(char* mTileMap, u64 tileMapWidth, u64 tileMapHeight)
 				e->strength = 1;
 				e->speed = 2.0f;
 				e->scale = V2Scalar(0.5f);
-				
-				e->item = NewItem(&state);
-				e->item->isHeld = true;
-				e->item->texture = swordTexture;
 				break;
 				
 				case 'C':
@@ -179,41 +175,67 @@ void LoadMap(char* mTileMap, u64 tileMapWidth, u64 tileMapHeight)
 		printf("Level exit missing!\n");
 }
 
-void UnloadMap()
+void CreateArenas()
 {
-	for (u64 i = 1; i < state.entitiesSize; ++i)
-	{
-		Entity* e = state.entities + i;
-		if (e->item != NULL)
-			e->item->isHeld = false;
-		e->item = NULL;
-	}
-	
-	Entity frogData = *state.entities;
-	// TODO(nickel): FIX ITEMS
-	/*// NOTE(nickel): Item playerItemsData[PLAYER_ITEMS_SIZE];
-	for (u64 i = 0; i < PLAYER_ITEMS_SIZE; ++i)
-	{
-		Item* t = state.playerItems[i];
-		memcpy(&playerItemsData[i], t, sizeof(Item));
-	}
-	
-	free(state.items);
+	state.entitiesSize = 0;
 	state.itemsSize = 0;
-	state.items = (Item*)calloc(ITEMS_MAX_SIZE, sizeof(Item));*/
+	
+	state.entities = (Entity*)calloc(ENTITIES_MAX_SIZE, sizeof(Entity));
+	state.items = (Item*)calloc(ITEMS_MAX_SIZE, sizeof(Item));
+	
+	state.playerItemId = 0;
+	for (u64 i = 0; i < PLAYER_ITEMS_SIZE; ++i)
+		state.playerItems[i] = NULL;
+	
+	frog = NULL;
+}
+
+void UnloadMap(b8 keepPlayer)
+{
+	Entity playerData;
+	Item itemsData[PLAYER_ITEMS_SIZE];
+	i32 itemIdData = 0;
+	if (keepPlayer)
+	{
+		itemIdData = state.playerItemId;
+		memcpy(&playerData, frog, sizeof(Entity));
+		for (u64 i = 0; i < PLAYER_ITEMS_SIZE; ++i)
+		{
+			Item* item = state.playerItems[i];
+			if (item != NULL)
+			{
+				memcpy(&itemsData[i], item, sizeof(Item));
+				itemsData[i].isHeld = true;
+			}
+			else
+				itemsData[i].isHeld = false;
+		}
+	}
 	
 	free(state.entities);
-	state.entitiesSize = 0;
-	state.entities = (Entity*)calloc(ENTITIES_MAX_SIZE, sizeof(Entity));
+	free(state.items);
 	
-	frog = NewEntity(&state);
-	*frog = frogData;
+	CreateArenas();
 	
-	/*for (u64 i = 0; i < PLAYER_ITEMS_SIZE; ++i)
+	if (keepPlayer)
 	{
-		Item* t = NewItem(&state);
-		memcpy(t, &playerItemsData[i], sizeof(Item));
-	}*/
+		state.playerItemId = itemIdData;
+		
+		frog = NewEntity(&state);
+		memcpy(frog, &playerData, sizeof(Entity));
+		for (u64 i = 0; i < PLAYER_ITEMS_SIZE; ++i)
+		{
+			if (!itemsData[i].isHeld)
+			{
+				state.playerItems[i] = NULL;
+				continue;
+			}
+			
+			Item* item = NewItem(&state);
+			memcpy(item, &itemsData[i], sizeof(Item));
+			state.playerItems[i] = item;
+		}
+	}
 }
 
 #endif // __MAPS_H_
