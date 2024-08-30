@@ -49,7 +49,7 @@ Item* NewPotion(State* state, u32 outlineTexture, u32 fillTexture)
 	
 	result->damage = 0;
 	result->isPotion = true;
-	result->effect = rand() % POTION_EFFECT_SPEED;
+	result->effect = rand() % POTION_EFFECT_SPEED + 1;
 	result->fillTint = potionEffectColors[result->effect];
 	result->fill = fillTexture;
 	result->texture = outlineTexture;

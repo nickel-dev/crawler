@@ -85,9 +85,9 @@ void LoadMap(char* mTileMap, u64 tileMapWidth, u64 tileMapHeight)
 				e = NewEnemy(&state);
 				e->pos = V2(x, y);
 				e->texture = snowmanTexture;
-				e->health = 6;
+				e->health = 7;
 				e->strength = 1;
-				e->speed = 1.9f;
+				e->speed = 2.0f;
 				
 				if (spawnWithWeapon)
 				{

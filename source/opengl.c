@@ -208,7 +208,7 @@ void DrawChar(State* state, v2 pos, v2 scale, i32 character, v4 tint)
 void DrawString(State* state, v2 pos, v2 scale, const char* string, v4 tint)
 {
 	u64 length = strlen(string);
-	pos.x += (f32)length / 2;
+	pos.x -= (f32)length / 2 * scale.x;
 	
 	for (u64 x = 0; x < length; ++x)
 		DrawChar(state, V2AddV2(pos, V2(x * (scale.x * 0.75f), 0.0f)), scale, string[x], tint);

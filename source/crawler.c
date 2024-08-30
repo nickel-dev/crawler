@@ -18,10 +18,14 @@
 #define TilePos(t, x, y) t[(TILE_MAP_HEIGHT - y - 1) * TILE_MAP_WIDTH + x]
 
 global State state;
+global Tutorial tutorial;
 
 global b8 pickedUpItemThisFrame;
 global b8 loadNextLevel;
+global b8 inTransition;
 
+global u32 uiTransitionTexture;
+global u32 uiMenuBackTexture;
 global u32 uiInvTexture;
 global u32 uiOverlayTexture;
 
@@ -52,8 +56,7 @@ global char* tileMap;
 
 #include "maps.h"
 
-//~ NOTE(nickel): Function OnStart
-extern GAME_ON_START(OnStart)
+void LoadAssets()
 {
 	StartRenderer(&state);
 	srand(time(0));
@@ -66,6 +69,8 @@ extern GAME_ON_START(OnStart)
 	
 	// Loading UI textures
 	state.fontTexture = LoadTexture("textures/font.png");
+	uiTransitionTexture = CreateTextureFromRGBA(V4(0, 0, 0, 255));
+	uiMenuBackTexture = LoadTexture("textures/main_menu.png");
 	uiInvTexture = LoadTexture("textures/inv_ring.png");
 	uiOverlayTexture = CreateTextureFromRGBA(V4(0, 0, 0, 155));
 	
@@ -97,6 +102,7 @@ extern GAME_ON_START(OnStart)
 	state.entitiesSize = 0;
 	state.entities = (Entity*)calloc(ENTITIES_MAX_SIZE, sizeof(Entity));
 	
+	// Gameplay Init
 	// Items
 	state.itemsSize = 0;
 	state.items = (Item*)calloc(ITEMS_MAX_SIZE, sizeof(Item));
@@ -106,6 +112,18 @@ extern GAME_ON_START(OnStart)
 	state.playerItems[1] = NULL;
 	state.playerItems[2] = NULL;
 	state.playerItems[3] = NULL;
+}
+
+//~ NOTE(nickel): Function OnStart
+extern GAME_ON_START(OnStart)
+{
+	local_persist b8 assetsLoaded = false;
+	if (!assetsLoaded)
+	{
+		LoadAssets();
+		assetsLoaded = true;
+	}
+	
 	
 	frog = NewEntity(&state);
 	frog->texture = LoadTexture("textures/frog_small.png");
@@ -114,8 +132,6 @@ extern GAME_ON_START(OnStart)
 	
 	LoadMapFiles();
 	LoadMap(maps[0], TILE_MAP_WIDTH, TILE_MAP_HEIGHT);
-	
-	//state.cameraPos = frog->pos;
 }
 
 b8 TileCollsion(i32 x, i32 y, AABB aabb)
@@ -154,16 +170,55 @@ extern GAME_ON_UPDATE(OnUpdate)
 {
 	f32 newWidth = (f32)windowWidth / 100;
 	f32 newHeight = (f32)windowHeight / 100;
-	
-	if (windowWidth != state.windowSize.x || windowHeight != state.windowSize.y)
-	{
-		state.projection = M4OrthoMatrix(-(newWidth / 2), newWidth / 2, -(newHeight / 2), newHeight / 2, -1.0f, 1.0f);
-		state.uiProjection = M4OrthoMatrix(0.0f, newWidth, newHeight, 0.0f, -1.0f, 1.0f);
-	}
+	state.projection = M4OrthoMatrix(-(newWidth / 2), newWidth / 2, -(newHeight / 2), newHeight / 2, -1.0f, 1.0f);
+	state.uiProjection = M4OrthoMatrix(0.0f, newWidth, newHeight, 0.0f, -1.0f, 1.0f);
 	state.windowSize = V2(windowWidth, windowHeight);
 	
+	f64 realDeltaTime = dt;
 	dt *= state.timeScale;
 	pickedUpItemThisFrame = false;
+	
+	
+	////////////////////
+	// Main Menu Mode //
+	////////////////////
+	
+	if (state.gameMode == GAME_MODE_MAIN_MENU)
+	{
+		DrawUiTexture(&state, uiMenuBackTexture, V2(newWidth / 2, newHeight / 2), V2(19, 10.8), 0.0f, V4Scalar(1.0f));
+		DrawString(&state, V2(newWidth / 2 + 3.0f, newHeight / 2 - 3.0f), V2Scalar(2.0f), "CRAWLER", V4Scalar(1.0f));
+		
+		DrawString(&state, V2(newWidth / 2 + 1.5f, newHeight / 2 + 4.0f), V2Scalar(0.5f), "PRESS SPACE TO START", V4Scalar(1.0f));
+		
+		if (input.keys[' '] && !oldInput.keys[' '])
+			inTransition = true;
+		
+		local_persist f64 transitionTimer = 0.0f;
+		local_persist f32 transitionOpacity = 0.0f;
+		if (inTransition)
+		{
+			DrawUiTexture(&state, uiTransitionTexture, V2Scalar(0.0f), V2(windowWidth / 2, windowHeight / 2), 0.0f, V4Scalar(transitionOpacity));
+			transitionOpacity += 1.5f * realDeltaTime;
+			state.timeScale = 0.0f;
+			
+			if (transitionTimer + 1.0f < currentTime)
+			{
+				state.gameMode = GAME_MODE_GAME;
+				transitionTimer = 0.0f;
+				inTransition = false;
+				state.timeScale = 1.0f;
+				transitionOpacity = 0.0f;
+			}
+		}
+		else
+			transitionTimer = currentTime;
+		
+		return;
+	}
+	
+	///////////////////
+	// Gameplay mode //
+	///////////////////
 	
 	// item switching
 	if (input.keys['1']) state.playerItemId = 0;
@@ -194,7 +249,7 @@ extern GAME_ON_UPDATE(OnUpdate)
 		
 		if (V2Distance(e->pos, frog->pos) < 10.0f)
 		{
-			if (e->health <= 0 && e->destroyable)
+			if (e->health < 0.5f && e->destroyable)
 			{
 				if (e->useAi)
 					e->texture = toombstoneTexture;
@@ -222,30 +277,26 @@ extern GAME_ON_UPDATE(OnUpdate)
 			{
 				if (CheckOverlap(EntityAABB(frog), EntityAABB(e)) && e->useAi)
 				{
-					if (currentTime > frog->lastTimeHurt + Seconds(1.8f) && V2Distance(e->pos, frog->pos) <= e->scale.x - 0.1f)
+					if (currentTime > frog->lastTimeHurt + Seconds(1.5f) && V2Distance(e->pos, frog->pos) <= e->scale.x - 0.1f)
 					{
 						u8 oldHealth = frog->health;
-						if (e->item == NULL)
-							frog->health -= e->strength;
-						else
-							frog->health -= e->item->damage + e->strength;
+						i32 damage = e->strength;
+						if (e->item != NULL)
+							damage += e->strength;
+						
+						frog->health -= damage;
 						if (frog->health > oldHealth)
-							frog->health = 0;
+							frog->health = 0.0f;
 						frog->lastTimeHurt = currentTime;
 						frog->wobbleFrame = 40.0f;
 						frog->angle = 10.0f * FastSin(40);
 						frog->lastStunnedTime = currentTime;
 						frog->stunned = true;
 						frog->knockback = V2MulScalar(MoveTowards(e->pos, frog->pos), 5.0f);
-						state.cameraPos = V2AddV2(state.cameraPos, V2DivScalar(frog->knockback, 50.0f));
+						// Camera shake
+						state.cameraPos = V2AddV2(state.cameraPos,
+												  V2DivScalar(frog->knockback, 5.0f / damage * 10.0f));
 					}
-				}
-			}
-			else
-			{
-				if (CheckOverlap(EntityAABB(frog), EntityAABB(e)))
-				{
-					loadNextLevel = true;
 				}
 			}
 		}
@@ -329,6 +380,10 @@ extern GAME_ON_UPDATE(OnUpdate)
 		if (e->lastStunnedTime + Seconds(0.1f) < currentTime)
 			e->stunned = false;
 		
+		// Shadow
+		DrawTextureTinted(&state, uiInvTexture, V2SubV2(e->pos, V2(0.0f, 0.075f)), V2(0.5f, 0.125f), 0.0f, V4(1.0f, 1.0f, 1.0f, 0.25f));
+		
+		// Entity texture
 		DrawTexture(&state, e->texture, e->pos, e->scale, e->angle);
 		
 		/*
@@ -365,11 +420,11 @@ extern GAME_ON_UPDATE(OnUpdate)
 							break;
 							
 							case POTION_EFFECT_STRENGTH:
-							frog->strength += 1;
+							frog->strength += 0.5f;
 							break;
 							
 							case POTION_EFFECT_SPEED:
-							frog->speed += 0.1f;
+							frog->speed += 0.05f;
 							break;
 							
 							default:
@@ -380,7 +435,7 @@ extern GAME_ON_UPDATE(OnUpdate)
 						playerItem->fillTint.w = 0.0f; // make fill invisible
 						playerItem->isPotion = false;
 					}
-					else if (V2Distance(e->pos, itemPos) < 2.0f /*CheckOverlap(EntityAABB(e), hitbox)*/ && e->health > 0)
+					else if (V2Distance(e->pos, V2SubV2(itemPos, V2(0.0f, 0.75))) < 1.75f /*CheckOverlap(EntityAABB(e), hitbox)*/ && e->health > 0)
 					{
 						e->knockback = V2MulScalar(MoveTowards(frog->pos, e->pos), 3.0f);
 						if (!e->stunned)
@@ -388,9 +443,10 @@ extern GAME_ON_UPDATE(OnUpdate)
 							e->lastStunnedTime = currentTime;
 							e->stunned = true;
 							u8 oldHealth = e->health;
-							e->health -= playerItem->damage + frog->strength;
+							i32 damage = playerItem->damage + frog->strength;
+							e->health -= damage;
 							if (e->health > oldHealth)
-								e->health = 0;
+								e->health = 0.0f;
 						}
 					}
 					playerItem->lastHit = currentTime;
@@ -430,7 +486,25 @@ extern GAME_ON_UPDATE(OnUpdate)
 		// Item pickup
 		if (V2Distance(i->pos, frog->pos) < 1.5f)
 		{
-			DrawCharWorld(&state, i->pos, V2Scalar(0.5f), 'E', V4Scalar(1.0f));
+			DrawCharWorld(&state, V2AddV2(i->pos, V2(0.125f, -0.25f)), V2Scalar(0.5f), 'E', V4Scalar(1.0f));
+			
+			if (i->isPotion)
+			{
+				switch (i->effect)
+				{
+					case POTION_EFFECT_HEALTH:
+					DrawString(&state, V2(newWidth / 2 + 1.5, newHeight / 2 + 4.0f), V2Scalar(0.35f), "HEALTH POTION", V4Scalar(1.0f));
+					break;
+					
+					case POTION_EFFECT_STRENGTH:
+					DrawString(&state, V2(newWidth / 2 + 1.5, newHeight / 2 + 4.0f), V2Scalar(0.35f), "STRENGTH POTION", V4Scalar(1.0f));
+					break;
+					
+					case POTION_EFFECT_SPEED:
+					DrawString(&state, V2(newWidth / 2 + 1.5, newHeight / 2 + 4.0f), V2Scalar(0.35f), "SPEED POTION", V4Scalar(1.0f));
+					break;
+				}
+			}
 			
 			if (input.keys['E'] && !oldInput.keys['E'] && !pickedUpItemThisFrame)
 			{
@@ -458,6 +532,18 @@ extern GAME_ON_UPDATE(OnUpdate)
 				i->isHeld = true;
 				pickedUpItemThisFrame = true;
 			}
+		}
+	}
+	
+	// Item throw
+	if (input.keys['Q'] && !oldInput.keys['Q'] && !pickedUpItemThisFrame)
+	{
+		Item* i = state.playerItems[state.playerItemId];
+		if (state.playerItems[state.playerItemId] != NULL)
+		{
+			state.playerItems[state.playerItemId] = NULL;
+			i->pos = frog->pos;
+			i->isHeld = false;
 		}
 	}
 	
@@ -492,12 +578,56 @@ extern GAME_ON_UPDATE(OnUpdate)
 		}
 	}
 	
+	// NOTE(nickel): Tutorial
+	if (!tutorial.wasd)
+	{
+		DrawString(&state, V2(newWidth / 2 + 1, newHeight / 2 + 4.0f), V2Scalar(0.5f), "WASD TO MOVE", V4Scalar(1.0f));
+		if (tutorial.wasdTime == 0.0f)
+			tutorial.wasdTime = currentTime;
+		else if (tutorial.wasdTime + 2.0f < currentTime)
+			tutorial.wasd = true;
+	}
+	else if (!tutorial.attack)
+	{
+		DrawString(&state, V2(newWidth / 2 + 1, newHeight / 2 + 4.0f), V2Scalar(0.5f), "LEFT CLICK TO ATTACK", V4Scalar(1.0f));
+		if (tutorial.attackTime == 0.0f)
+			tutorial.attackTime = currentTime;
+		else if (tutorial.attackTime + 2.0f < currentTime)
+			tutorial.attack = true;
+	}
+	
+	// NOTE(nickel): Trapdoor
+	{
+		b8 allEnemiesDead = true;
+		for (u64 i = 0; i < state.enemiesSize; ++i)
+		{
+			if (state.enemies[i]->health >= 0.5f)
+				allEnemiesDead = false;
+		}
+		
+		if (CheckOverlap(EntityAABB(frog), EntityAABB(trapdoor)))
+		{
+			if (allEnemiesDead)
+				loadNextLevel = true;
+			else
+				DrawString(&state, V2(newWidth / 2 + 1.5, newHeight / 2 + 4.0f), V2Scalar(0.35f), "YOU NEED TO KILL ALL ENEMIES FIRST", V4Scalar(1.0f));
+		}
+	}
+	
 	// NOTE(nickel): Death message
-	if (frog->health == 0)
+	if (frog->health <= 0.5f)
 	{
 		state.timeScale = 0.0f;
 		DrawUiTexture(&state, uiOverlayTexture, V2Scalar(0.0f), V2Scalar(100.0f), 0.0f, V4Scalar(1.0f));
-		DrawString(&state, V2(0.0f, 5.0f), V2Scalar(2.0f), "YOU DIED", V4(1.0f, 0.3f, 0.2f, 1.0f));
+		DrawString(&state, V2(newWidth / 2 + 3, newHeight / 2), V2Scalar(2.0f), "YOU DIED",
+				   V4(1.0f, 0.3f, 0.2f, 1.0f));
+		DrawString(&state, V2(newWidth / 2 + 1, newHeight / 2 + 4.0f), V2Scalar(0.5f), "PRESS SPACE", V4Scalar(1.0f));
+		
+		if (input.keys[' '] && !oldInput.keys[' '])
+		{
+			state.gameMode = GAME_MODE_MAIN_MENU;
+			OnStart();
+		}
 	}
 	
 	if (loadNextLevel)
