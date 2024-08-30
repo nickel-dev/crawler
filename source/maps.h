@@ -94,9 +94,9 @@ void LoadMap(char* mTileMap, u64 tileMapWidth, u64 tileMapHeight)
 					// Mace
 					e->item = NewItem(&state);
 					e->item->texture = maceTexture;
-					e->item->damage = 1.5f;
+					e->item->damage = 2.0f;
 					e->item->isHeld = true;
-					e->item->cooldownTime = 0.75f;
+					e->item->cooldownTime = 1.0f;
 				}
 				break;
 				
@@ -105,7 +105,7 @@ void LoadMap(char* mTileMap, u64 tileMapWidth, u64 tileMapHeight)
 				e->pos = V2(x, y);
 				e->texture = mouseTexture;
 				e->health = 2;
-				e->strength = 1;
+				e->strength = 2;
 				e->speed = 2.0f;
 				e->scale = V2Scalar(0.5f);
 				break;
@@ -118,8 +118,6 @@ void LoadMap(char* mTileMap, u64 tileMapWidth, u64 tileMapHeight)
 				e->strength = 2;
 				e->speed = 1.5f;
 				e->scale = V2Scalar(0.5f);
-				
-				e->item = NewItem(&state);
 				break;
 				
 				case 'T':
@@ -127,11 +125,19 @@ void LoadMap(char* mTileMap, u64 tileMapWidth, u64 tileMapHeight)
 				e->pos = V2(x, y);
 				e->texture = tortoiseTexture;
 				e->health = 6;
-				e->strength = 2;
-				e->speed = 0.5f;
+				e->strength = 1;
+				e->speed = 2.5f;
 				e->scale = V2Scalar(1.0f);
 				
-				e->item = NewItem(&state);
+				if (spawnWithWeapon)
+				{
+					// Axe
+					e->item = NewItem(&state);
+					e->item->texture = axeTexture;
+					e->item->damage = 2.0f;
+					e->item->isHeld = true;
+					e->item->cooldownTime = 0.75f;
+				}
 				break;
 				
 				case '*':
@@ -191,6 +197,7 @@ void CreateArenas()
 	for (u64 i = 0; i < ENEMIES_MAX_SIZE; ++i)
 		state.enemies[i] = NULL;
 	
+	trapdoor = NULL;
 	frog = NULL;
 }
 
