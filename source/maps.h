@@ -94,7 +94,7 @@ void LoadMap(char* mTileMap, u64 tileMapWidth, u64 tileMapHeight)
 					// Mace
 					e->item = NewItem(&state);
 					e->item->texture = maceTexture;
-					e->item->damage = 2;
+					e->item->damage = 1.5f;
 					e->item->isHeld = true;
 					e->item->cooldownTime = 0.75f;
 				}

@@ -1,4 +1,4 @@
-//**********************************************************
+//**********************************************************+
 // Date: August 20th 2024 2:45 pm
 // Creator: Daniel Nickel
 // Notice: Copyright (C) Daniel Nickel, All Rights Reserved.
@@ -88,7 +88,7 @@ struct Item
 	v2 pos;
 	u32 texture, fill;
 	v4 fillTint;
-	u8 damage;
+	f32 damage;
 	b8 isHeld, isPotion;
 	u32 effect;
 	f64 lastHit;

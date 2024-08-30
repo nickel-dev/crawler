@@ -1,10 +1,12 @@
 #define STB_SPRINTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_TRUETYPE_IMPLEMENTATION
+#define MINIAUDIO_IMPLEMENTATION
 
 #include "third_party/stb_sprintf.h"
 #include "third_party/stb_image.h"
 #include "third_party/stb_truetype.h"
+#include "third_party/miniaudio.h"
 
 #include "platform.h"
 #include "math.h"
@@ -27,6 +29,7 @@ global b8 inTransition;
 global u32 uiTransitionTexture;
 global u32 uiMenuBackTexture;
 global u32 uiInvTexture;
+global u32 uiWhiteSpot;
 global u32 uiOverlayTexture;
 
 global u32 potionOutlineTexture;
@@ -54,10 +57,34 @@ global Entity* trapdoor;
 
 global char* tileMap;
 
+global ma_engine soundEngine;
+global ma_sound* hitSound;
+global ma_sound* hitPlayerSound;
+global ma_sound* potionSound;
+global ma_sound* menuSound;
+global ma_sound* selectSound;
+global ma_sound* pickupSound;
+
 #include "maps.h"
+
+ma_sound* LoadSound(const char* path)
+{
+	printf("-- Loading sound. path: %s --\n", path);
+	ma_sound *sound = (ma_sound*)malloc(sizeof(ma_sound));
+	ma_result result = ma_sound_init_from_file(&soundEngine, path, 0, NULL, NULL, sound);
+	if (result != MA_SUCCESS)
+		printf("loading sound failed! path: %s\n", path);
+	return sound;
+}
 
 void LoadAssets()
 {
+	// Sound
+	ma_result result = ma_engine_init(NULL, &soundEngine);
+	if (result != MA_SUCCESS)
+		printf("failed to init sound engine!\n");
+	
+	// Rendering
 	StartRenderer(&state);
 	srand(time(0));
 	
@@ -72,6 +99,7 @@ void LoadAssets()
 	uiTransitionTexture = CreateTextureFromRGBA(V4(0, 0, 0, 255));
 	uiMenuBackTexture = LoadTexture("textures/main_menu.png");
 	uiInvTexture = LoadTexture("textures/inv_ring.png");
+	uiWhiteSpot = LoadTexture("textures/white_spot.png");
 	uiOverlayTexture = CreateTextureFromRGBA(V4(0, 0, 0, 155));
 	
 	potionOutlineTexture = LoadTexture("textures/potion_outline.png");
@@ -97,6 +125,16 @@ void LoadAssets()
 	tileMapTextures[0] = CreateTextureFromRGBA(V4(50.0f, 27.0f, 39.0f, 255.0f));
 	tileMapTextures[1] = LoadTexture("textures/brick_small.png");
 	tileMapTextures[2] = LoadTexture("textures/stone_ground.png");
+	
+	// Loading sounds
+	hitSound = LoadSound("sounds/hit.wav");
+	hitPlayerSound = LoadSound("sounds/hit_player.wav");
+	potionSound = LoadSound("sounds/potion.wav");
+	menuSound = LoadSound("sounds/menu.wav");
+	selectSound = LoadSound("sounds/select.wav");
+	pickupSound = LoadSound("sounds/pickup.wav");
+	
+	ma_sound_set_volume(selectSound, 0.5f);
 	
 	// Allocate entity arena
 	state.entitiesSize = 0;
@@ -178,7 +216,6 @@ extern GAME_ON_UPDATE(OnUpdate)
 	dt *= state.timeScale;
 	pickedUpItemThisFrame = false;
 	
-	
 	////////////////////
 	// Main Menu Mode //
 	////////////////////
@@ -191,7 +228,10 @@ extern GAME_ON_UPDATE(OnUpdate)
 		DrawString(&state, V2(newWidth / 2 + 1.5f, newHeight / 2 + 4.0f), V2Scalar(0.5f), "PRESS SPACE TO START", V4Scalar(1.0f));
 		
 		if (input.keys[' '] && !oldInput.keys[' '])
+		{
+			ma_sound_start(menuSound);
 			inTransition = true;
+		}
 		
 		local_persist f64 transitionTimer = 0.0f;
 		local_persist f32 transitionOpacity = 0.0f;
@@ -221,15 +261,21 @@ extern GAME_ON_UPDATE(OnUpdate)
 	///////////////////
 	
 	// item switching
-	if (input.keys['1']) state.playerItemId = 0;
-	if (input.keys['2']) state.playerItemId = 1;
-	if (input.keys['3']) state.playerItemId = 2;
-	if (input.keys['4']) state.playerItemId = 3;
+	if (input.keys['1']) { state.playerItemId = 0; ma_sound_start(selectSound); }
+	if (input.keys['2']) { state.playerItemId = 1; ma_sound_start(selectSound); }
+	if (input.keys['3']) { state.playerItemId = 2; ma_sound_start(selectSound); }
+	if (input.keys['4']) { state.playerItemId = 3; ma_sound_start(selectSound); }
 	
 	if (mouseWheel > 0)
+	{
 		state.playerItemId -= 1;
+		ma_sound_start(selectSound);
+	}
 	else if (mouseWheel < 0)
+	{
 		state.playerItemId += 1;
+		ma_sound_start(selectSound);
+	}
 	
 	if (state.playerItemId >= PLAYER_ITEMS_SIZE)
 		state.playerItemId = 0;
@@ -283,7 +329,7 @@ extern GAME_ON_UPDATE(OnUpdate)
 						i32 damage = e->strength;
 						if (e->item != NULL)
 							damage += e->strength;
-						
+						ma_sound_start(hitPlayerSound);
 						frog->health -= damage;
 						if (frog->health > oldHealth)
 							frog->health = 0.0f;
@@ -412,6 +458,8 @@ extern GAME_ON_UPDATE(OnUpdate)
 					
 					if (playerItem->isPotion)
 					{
+						ma_sound_start(potionSound);
+						
 						switch (playerItem->effect)
 						{
 							case POTION_EFFECT_HEALTH:
@@ -424,7 +472,7 @@ extern GAME_ON_UPDATE(OnUpdate)
 							break;
 							
 							case POTION_EFFECT_SPEED:
-							frog->speed += 0.05f;
+							frog->speed += 0.1f;
 							break;
 							
 							default:
@@ -444,6 +492,7 @@ extern GAME_ON_UPDATE(OnUpdate)
 							e->stunned = true;
 							u8 oldHealth = e->health;
 							i32 damage = playerItem->damage + frog->strength;
+							ma_sound_start(hitSound);
 							e->health -= damage;
 							if (e->health > oldHealth)
 								e->health = 0.0f;
@@ -493,21 +542,23 @@ extern GAME_ON_UPDATE(OnUpdate)
 				switch (i->effect)
 				{
 					case POTION_EFFECT_HEALTH:
-					DrawString(&state, V2(newWidth / 2 + 1.5, newHeight / 2 + 4.0f), V2Scalar(0.35f), "HEALTH POTION", V4Scalar(1.0f));
+					DrawString(&state, V2(newWidth / 2 + 0.75f, newHeight / 2 + 4.0f), V2Scalar(0.35f), "HEALTH POTION", V4Scalar(1.0f));
 					break;
 					
 					case POTION_EFFECT_STRENGTH:
-					DrawString(&state, V2(newWidth / 2 + 1.5, newHeight / 2 + 4.0f), V2Scalar(0.35f), "STRENGTH POTION", V4Scalar(1.0f));
+					DrawString(&state, V2(newWidth / 2 + 0.75f, newHeight / 2 + 4.0f), V2Scalar(0.35f), "STRENGTH POTION", V4Scalar(1.0f));
 					break;
 					
 					case POTION_EFFECT_SPEED:
-					DrawString(&state, V2(newWidth / 2 + 1.5, newHeight / 2 + 4.0f), V2Scalar(0.35f), "SPEED POTION", V4Scalar(1.0f));
+					DrawString(&state, V2(newWidth / 2 + 0.75f, newHeight / 2 + 4.0f), V2Scalar(0.35f), "SPEED POTION", V4Scalar(1.0f));
 					break;
 				}
 			}
 			
 			if (input.keys['E'] && !oldInput.keys['E'] && !pickedUpItemThisFrame)
 			{
+				ma_sound_start(pickupSound);
+				
 				u8 c;
 				b8 hasEmpty = false;
 				for (c = 0; c < PLAYER_ITEMS_SIZE; ++c)
@@ -559,22 +610,28 @@ extern GAME_ON_UPDATE(OnUpdate)
 	{
 		Item* item = state.playerItems[i];
 		
+		f32 tint = 0.5f;
+		v2 scale = V2Scalar(0.4f);
+		
+		if (i == state.playerItemId)
+		{
+			tint = 1.0f;
+			scale = V2Scalar(0.5f);
+		}
+		
 		if (item != NULL)
 		{
-			f32 tint = 0.5f;
-			v2 scale = V2Scalar(0.4f);
-			
-			if (i == state.playerItemId)
-			{
-				tint = 1.0f;
-				scale = V2Scalar(0.5f);
-			}
-			
 			DrawUiTexture(&state, item->texture, V2((FastSin(90 + i * 24) * 2.5 - 0.25),
 													(FastCos(i * 24 - 90) * 2.0 + 0.5)), scale, 0.0f, V4(tint, tint, tint, 1.0f));
+			
 			if (item->fill != 0)
 				DrawUiTexture(&state, item->fill, V2((FastSin(90 + i * 24) * 2.5 - 0.25),
 													 (FastCos(i * 24 - 90) * 2.0 + 0.5)), scale, 0.0f, V4MulV4(item->fillTint, V4(tint, tint, tint, 1.0f)));
+		}
+		else
+		{
+			DrawUiTexture(&state, uiWhiteSpot, V2((FastSin(90 + i * 24) * 2.5 - 0.25),
+												  (FastCos(i * 24 - 90) * 2.0 + 0.5)), scale, 0.0f, V4(tint, tint, tint, 1.0f));
 		}
 	}
 	
@@ -625,6 +682,7 @@ extern GAME_ON_UPDATE(OnUpdate)
 		
 		if (input.keys[' '] && !oldInput.keys[' '])
 		{
+			ma_sound_start(menuSound);
 			state.gameMode = GAME_MODE_MAIN_MENU;
 			OnStart();
 		}
