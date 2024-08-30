@@ -2,6 +2,8 @@
 Crawler is my first game I set out to make entirely in 30 days.  
 It is a 2D top down dungeon game made in C on windows using no external libraries.    
 
+![screenshot]("screenshot.png")    
+
 ## How to compile
 Clone the git repo using `git clone https://github.com/nickel-dev/crawler.git`.  
 The go into the directory you just clone `cd crawler`.  
